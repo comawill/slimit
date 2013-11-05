@@ -398,6 +398,14 @@ class MinifierTestCase(unittest.TestCase):
          """,
          "(function($){$.hello='world';}(jQuery));"),
 
+        # function call on immediate number
+        ('((25)).toString()', '(25).toString();'),
+        ('((25))["toString"]()', '(25).toString();'),
+
+        # attribute access on immediate number
+        ('((25)).attr', '(25).attr;'),
+        ('((25))["attr"]', '(25).attr;'),
+
         # function call in FOR init
         ('for(o(); i < 3; i++) {}', 'for(o();i<3;i++){}'),
 
