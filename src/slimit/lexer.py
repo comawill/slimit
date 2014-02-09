@@ -199,6 +199,8 @@ class Lexer(object):
 
         return token
 
+    __next__ = next
+
     states = (
         ('regex', 'exclusive'),
         )
