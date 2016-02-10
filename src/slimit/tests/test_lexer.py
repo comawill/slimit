@@ -151,6 +151,7 @@ class LexerTestCase(unittest.TestCase):
          [r"STRING '\u0001'", r'STRING "\uFCEF"', r"STRING 'a\\\b\n'"]
          ),
         (u'"тест строки\\""', [u'STRING "тест строки\\""']),
+        (r"""'\251'""", [r"""STRING '\251'"""]),
         # Bug - https://github.com/rspivak/slimit/issues/5
         (r"var tagRegExp = new RegExp('<(\/*)(FooBar)', 'gi');",
          ['VAR var', 'ID tagRegExp', 'EQ =',

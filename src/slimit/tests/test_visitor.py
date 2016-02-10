@@ -24,33 +24,523 @@
 
 __author__ = 'Ruslan Spivak <ruslan.spivak@gmail.com>'
 
+import textwrap
 import unittest
 
+from slimit.parser import Parser
 from slimit import minify
 
-
-def decorator(cls):
-    def make_test_function(input, expected):
-
-        def test_func(self):
-            self.assertMinified(input, expected)
-
-        return test_func
-
-    for index, (input, expected) in enumerate(cls.TEST_CASES):
-        func = make_test_function(input, expected)
-        setattr(cls, 'test_case_%d' % index, func)
-
-    return cls
+UnitTestMeta = type(unittest.TestCase)
 
 
-@decorator
+class VisitorTestMeta(UnitTestMeta):
+    def __new__(cls, name, bases, attributes):
+        try:
+            test_cases = attributes['TEST_CASES']
+        except KeyError:
+            test_cases = [getattr(b, 'TEST_CASES')
+                          for b in bases
+                          if hasattr(b, 'TEST_CASES')][0]
+
+        def generate_test_func(name, case):
+            func = lambda self: self.case(case)
+            func.__name__ = name
+            return func
+
+        for idx, case in enumerate(test_cases):
+            name = 'test_case_{}'.format(idx)
+            attributes[name] = generate_test_func(name, case)
+
+        return super(VisitorTestMeta, cls).__new__(cls, name, bases, attributes)
+
+
+class VisitorTestMixin(object):
+    TEST_CASES = [
+        ################################
+        # block
+        ################################
+        """
+        {
+          var a = 5;
+        }
+        """,
+
+        ################################
+        # variable statement
+        ################################
+        """
+        var a;
+        var b;
+        var a, b = 3;
+        var a = 1, b;
+        var a = 5, b = 7;
+        """,
+
+        # empty statement
+        """
+        ;
+        ;
+        ;
+        """,
+
+        # test 3
+        ################################
+        # if
+        ################################
+        'if (true) var x = 100;',
+
+        """
+        if (true) {
+          var x = 100;
+          var y = 200;
+        }
+        """,
+
+        'if (true) if (true) var x = 100; else var y = 200;',
+
+        # test 6
+        """
+        if (true) {
+          var x = 100;
+        } else {
+          var y = 200;
+        }
+        """,
+        ################################
+        # iteration
+        ################################
+        """
+        for (i = 0; i < 10; i++) {
+          x = 10 * i;
+        }
+        """,
+
+        """
+        for (var i = 0; i < 10; i++) {
+          x = 10 * i;
+        }
+        """,
+
+        # test 9
+        """
+        for (i = 0, j = 10; i < j && j < 15; i++, j++) {
+          x = i * j;
+        }
+        """,
+
+        """
+        for (var i = 0, j = 10; i < j && j < 15; i++, j++) {
+          x = i * j;
+        }
+        """,
+
+        """
+        for (p in obj) {
+
+        }
+        """,
+        # retain the semicolon in the initialiser part of a 'for' statement
+        """
+        for (Q || (Q = []); d < b; ) {
+          d = 1;
+        }
+        """,
+
+        """
+        for (new Foo(); d < b; ) {
+          d = 1;
+        }
+        """,
+
+        """
+        for (2 >> (foo ? 32 : 43) && 54; 21; ) {
+          a = c;
+        }
+        """,
+
+        """
+        for (/^.+/g; cond(); ++z) {
+          ev();
+        }
+        """,
+
+        # test 12
+        """
+        for (var p in obj) {
+          p = 1;
+        }
+        """,
+
+        """
+        do {
+          x += 1;
+        } while (true);
+        """,
+
+        """
+        while (false) {
+          x = null;
+        }
+        """,
+
+        # test 15
+        ################################
+        # continue statement
+        ################################
+        """
+        while (true) {
+          continue;
+          s = 'I am not reachable';
+        }
+        """,
+
+        """
+        while (true) {
+          continue label1;
+          s = 'I am not reachable';
+        }
+        """,
+
+        ################################
+        # break statement
+        ################################
+        """
+        while (true) {
+          break;
+          s = 'I am not reachable';
+        }
+        """,
+        # test 18
+        """
+        while (true) {
+          break label1;
+          s = 'I am not reachable';
+        }
+        """,
+
+        ################################
+        # return statement
+        ################################
+        """
+        {
+          return;
+        }
+        """,
+
+        """
+        {
+          return 1;
+        }
+        """,
+
+        # test21
+        ################################
+        # with statement
+        ################################
+        """
+        with (x) {
+          var y = x * 2;
+        }
+        """,
+
+        ################################
+        # labelled statement
+        ################################
+        """
+        label: while (true) {
+          x *= 3;
+        }
+        """,
+
+        ################################
+        # switch statement
+        ################################
+        """
+        switch (day_of_week) {
+          case 6:
+          case 7:
+            x = 'Weekend';
+            break;
+          case 1:
+            x = 'Monday';
+            break;
+          default:
+            break;
+        }
+        """,
+
+        # test 24
+        ################################
+        # throw statement
+        ################################
+        """
+        throw 'exc';
+        """,
+
+        ################################
+        # debugger statement
+        ################################
+        'debugger;',
+
+        ################################
+        # expression statement
+        ################################
+        """
+        5 + 7 - 20 * 10;
+        ++x;
+        --x;
+        x++;
+        x--;
+        x = 17 /= 3;
+        s = mot ? z : /x:3;x<5;y</g / i;
+        """,
+
+        # test 27
+        ################################
+        # try statement
+        ################################
+        """
+        try {
+          x = 3;
+        } catch (exc) {
+          x = exc;
+        }
+        """,
+
+        """
+        try {
+          x = 3;
+        } finally {
+          x = null;
+        }
+        """,
+
+        """
+        try {
+          x = 5;
+        } catch (exc) {
+          x = exc;
+        } finally {
+          y = null;
+        }
+        """,
+
+        # test 30
+        ################################
+        # function
+        ################################
+        """
+        function foo(x, y) {
+          z = 10;
+          return x + y + z;
+        }
+        """,
+
+        """
+        function foo() {
+          return 10;
+        }
+        """,
+
+        """
+        var a = function() {
+          return 10;
+        };
+        """,
+        # test 33
+        """
+        var a = function foo(x, y) {
+          return x + y;
+        };
+        """,
+        # nested function declaration
+        """
+        function foo() {
+          function bar() {
+
+          }
+        }
+        """,
+
+        """
+        var mult = function(x) {
+          return x * 10;
+        }();
+        """,
+
+        # function call
+        # test 36
+        'foo();',
+        'foo(x, 7);',
+        'foo()[10];',
+        # test 39
+        'foo().foo;',
+
+        ################################
+        # misc
+        ################################
+
+        # new
+        'var foo = new Foo();',
+        # dot accessor
+        'var bar = new Foo.Bar();',
+
+        # test 42
+        # bracket accessor
+        'var bar = new Foo.Bar()[7];',
+
+        # object literal
+        """
+        var obj = {
+          foo: 10,
+          bar: 20
+        };
+        """,
+        """
+        var obj = {
+          1: 'a',
+          2: 'b'
+        };
+        """,
+        # test 45
+        """
+        var obj = {
+          'a': 100,
+          'b': 200
+        };
+        """,
+        """
+        var obj = {
+        };
+        """,
+
+        # array
+        """
+        var a = [1,2,3,4,5];
+        var res = a[3];
+        """,
+        # test 48
+        # elision
+        'var a = [,,,];',
+        'var a = [1,,,4];',
+        'var a = [1,,3,,5];',
+
+        # test 51
+        """
+        String.prototype.foo = function(data) {
+          var tmpl = this.toString();
+          return tmpl.replace(/{{\s*(.*?)\s*}}/g, function(a, b) {
+            var node = data;
+            if (true) {
+              var value = true;
+            } else {
+              var value = false;
+            }
+            $.each(n.split('.'), function(i, sym) {
+              node = node[sym];
+            });
+            return node;
+          });
+        };
+        """,
+
+        #######################################
+        # Make sure parentheses are not removed
+        #######################################
+
+        # ... Expected an identifier and instead saw '/'
+        'Expr.match[type].source + (/(?![^\[]*\])(?![^\(]*\))/.source);',
+
+        '(options = arguments[i]) != null;',
+
+        # test 54
+        'return (/h\d/i).test(elem.nodeName);',
+
+        # https://github.com/rspivak/slimit/issues/42
+        """
+        e.b(d) ? (a = [c.f(j[1])], e.fn.attr.call(a, d, !0)) : a = [k.f(j[1])];
+        """,
+
+        """
+        (function() {
+          x = 5;
+        }());
+        """,
+
+        """
+        (function() {
+          x = 5;
+        })();
+        """,
+
+        'return !(match === true || elem.getAttribute("classid") !== match);',
+
+        # test 57
+        'var el = (elem ? elem.ownerDocument || elem : 0).documentElement;',
+
+        # typeof
+        'typeof second.length === "number";',
+
+        # function call in FOR init
+        """
+        for (o(); i < 3; i++) {
+
+        }
+        """,
+
+        # https://github.com/rspivak/slimit/issues/32
+        """
+        Name.prototype = {
+          get fullName() {
+            return this.first + " " + this.last;
+          },
+          set fullName(name) {
+            var names = name.split(" ");
+            this.first = names[0];
+            this.last = names[1];
+          }
+        };
+        """,
+        ]
+
+
+class ECMAVisitorTestCase(VisitorTestMixin, unittest.TestCase):
+    __metaclass__ = VisitorTestMeta
+
+    def setUp(self):
+        self.maxDiff = 2000
+
+    def case(self, case):
+        parser = Parser()
+        result = parser.parse(case).to_ecma()
+        expected = textwrap.dedent(case).strip()
+        self.assertMultiLineEqual(result, expected)
+
+
+class ParsingTestCase(VisitorTestMixin, unittest.TestCase):
+    __metaclass__ = VisitorTestMeta
+
+    def case(self, case):
+        parser_a = Parser()
+        result_a = parser_a.parse(case)
+
+        parser_b = Parser()
+        result_b = parser_b.parse(case)
+
+        self.assertEqual(result_a, result_b)
+
+
 class MinifierTestCase(unittest.TestCase):
+    __metaclass__ = VisitorTestMeta
 
     def assertMinified(self, source, expected):
         minified = minify(source)
         self.maxDiff = None
         self.assertSequenceEqual(minified, expected)
+
+    def case(self, case):
+        input_, expected = case
+        self.assertMinified(input_, expected)
 
     TEST_CASES = [
         ("""
@@ -398,6 +888,14 @@ class MinifierTestCase(unittest.TestCase):
          """,
          "(function($){$.hello='world';}(jQuery));"),
 
+        # function call on immediate number
+        ('((25)).toString()', '(25).toString();'),
+        ('((25))["toString"]()', '(25).toString();'),
+
+        # attribute access on immediate number
+        ('((25)).attr', '(25).attr;'),
+        ('((25))["attr"]', '(25).attr;'),
+
         # function call in FOR init
         ('for(o(); i < 3; i++) {}', 'for(o();i<3;i++){}'),
 
@@ -468,3 +966,33 @@ class MinifierTestCase(unittest.TestCase):
         ('testObj["."] = undefined; // OK', 'testObj["."]=undefined;'),
         ]
 
+
+class MinifierReparsingTestCase(unittest.TestCase):
+    __metaclass__ = VisitorTestMeta
+
+    TEST_CASES = [
+        """
+        a + +a;
+        """,
+
+        """
+        a - -a;
+        """,
+
+        """
+        a - +a;
+        """,
+
+        """
+        a + ++a;
+        """,
+
+        """
+        a - --a;
+        """
+    ]
+
+    def case(self, case):
+        parsed = Parser().parse(case)
+        minified = Parser().parse(minify(case))
+        self.assertEqual(parsed, minified)

@@ -34,6 +34,7 @@ _HAS_ID_MATCH = re.compile('^%s$' % Lexer.identifier).match
 def _is_identifier(value):
     return _HAS_ID_MATCH(value) and value not in Lexer.keywords_dict
 
+specials = re.compile(r'[`\\~!@#%\^&*(){}\[\]\-+=/|<>,.:;?]+')
 
 class ECMAMinifier(object):
 
@@ -188,12 +189,12 @@ class ECMAMinifier(object):
     def visit_BinOp(self, node):
         if node.op in ('instanceof', 'in'):
             template = '%s %s %s'
-        elif (node.op == '+' and
-              isinstance(node.right, ast.UnaryOp) and
-              node.right.op == '++' and not node.right.postfix
+        elif isinstance(node.right, ast.UnaryOp) and not node.right.postfix \
+             and (
+                (node.op == '+' and node.right.op in ('++', '+')) or
+                (node.op == '-' and node.right.op in ('--', '-'))
               ):
-            # make a space between + and ++
-            # https://github.com/rspivak/slimit/issues/26
+            # Don't merge + +, + ++, - - and - --
             template = '%s%s %s'
         else:
             template = '%s%s%s'
@@ -388,20 +389,27 @@ class ECMAMinifier(object):
             template = '(%s.%s)'
         else:
             template = '%s.%s'
-        s = template % (self.visit(node.node), self.visit(node.identifier))
+        left = self.visit(node.node)
+        if isinstance(node.node, ast.Number):
+            left = '(%s)' % left
+        s = template % (left, self.visit(node.identifier))
         return s
 
     def visit_BracketAccessor(self, node):
         if isinstance(node.expr, ast.String):
             value = node.expr.value
-            # remove single or double quotes around the value, but not both
-            if value.startswith("'"):
-                value = value.strip("'")
-            elif value.startswith('"'):
-                value = value.strip('"')
-            if _is_identifier(value):
-                s = '%s.%s' % (self.visit(node.node), value)
-                return s
+            if not specials.search(value):
+                # remove single or double quotes around the value, but not both
+                if value.startswith("'"):
+                    value = value.strip("'")
+                elif value.startswith('"'):
+                    value = value.strip('"')
+                if _is_identifier(value):
+                    left = self.visit(node.node)
+                    if isinstance(node.node, ast.Number):
+                        left = '(%s)' % left
+                    s = '%s.%s' % (left, value)
+                    return s
 
         s = '%s[%s]' % (self.visit(node.node), self.visit(node.expr))
         return s

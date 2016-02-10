@@ -29,10 +29,10 @@ import ply.yacc
 from slimit import ast
 from slimit.lexer import Lexer
 
-try:
-    from slimit import lextab, yacctab
-except ImportError:
-    lextab, yacctab = 'lextab', 'yacctab'
+# The default values for the `Parser` constructor, passed on to ply; they must
+# be strings
+lextab = '%s.lextab' % __package__
+yacctab = '%s.yacctab' % __package__
 
 
 class Parser(object):
@@ -45,12 +45,14 @@ class Parser(object):
     """
 
     def __init__(self, lex_optimize=True, lextab=lextab,
-                 yacc_optimize=True, yacctab=yacctab, yacc_debug=False):
+                 yacc_optimize=True, yacctab=yacctab, yacc_debug=False,
+                 yacc_tracking=False):
         self.lex_optimize = lex_optimize
         self.lextab = lextab
         self.yacc_optimize = yacc_optimize
         self.yacctab = yacctab
         self.yacc_debug = yacc_debug
+        self.yacc_tracking = yacc_tracking
 
         self.lexer = Lexer()
         self.lexer.build(optimize=lex_optimize, lextab=lextab)
@@ -90,7 +92,7 @@ class Parser(object):
             )
 
     def parse(self, text, debug=False):
-        return self.parser.parse(text, lexer=self.lexer, debug=debug)
+        return self.parser.parse(text, lexer=self.lexer, debug=debug, tracking=self.yacc_tracking)
 
     def p_empty(self, p):
         """empty :"""
@@ -899,7 +901,7 @@ class Parser(object):
         """variable_statement : VAR variable_declaration_list SEMI
                               | VAR variable_declaration_list auto_semi
         """
-        p[0] = ast.VarStatement(p[2])
+        p[0] = ast.VarStatement(p[2], p=p)
 
     def p_variable_declaration_list(self, p):
         """
@@ -930,18 +932,18 @@ class Parser(object):
                                 | identifier initializer
         """
         if len(p) == 2:
-            p[0] = ast.VarDecl(p[1])
+            p[0] = ast.VarDecl(p[1], p=p)
         else:
-            p[0] = ast.VarDecl(p[1], p[2])
+            p[0] = ast.VarDecl(p[1], p[2], p=p)
 
     def p_variable_declaration_noin(self, p):
         """variable_declaration_noin : identifier
                                      | identifier initializer_noin
         """
         if len(p) == 2:
-            p[0] = ast.VarDecl(p[1])
+            p[0] = ast.VarDecl(p[1], p=p)
         else:
-            p[0] = ast.VarDecl(p[1], p[2])
+            p[0] = ast.VarDecl(p[1], p[2], p=p)
 
     def p_initializer(self, p):
         """initializer : EQ assignment_expr"""
@@ -1011,14 +1013,14 @@ class Parser(object):
         iteration_statement : \
             FOR LPAREN VAR identifier IN expr RPAREN statement
         """
-        p[0] = ast.ForIn(item=ast.VarDecl(p[4]), iterable=p[6], statement=p[8])
+        p[0] = ast.ForIn(item=ast.VarDecl(p[4], p=p), iterable=p[6], statement=p[8])
 
     def p_iteration_statement_6(self, p):
         """
         iteration_statement \
           : FOR LPAREN VAR identifier initializer_noin IN expr RPAREN statement
         """
-        p[0] = ast.ForIn(item=ast.VarDecl(identifier=p[4], initializer=p[5]),
+        p[0] = ast.ForIn(item=ast.VarDecl(identifier=p[4], initializer=p[5], p=p),
                          iterable=p[7], statement=p[9])
 
     def p_expr_opt(self, p):
