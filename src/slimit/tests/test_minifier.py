@@ -399,12 +399,15 @@ class MinifierTestCase(unittest.TestCase):
          "(function($){$.hello='world';}(jQuery));"),
 
         # function call on immediate number
+        ('(0x25).toString()', '0x25.toString();'),
+        ('(1e3).toString()', '1e3.toString();'),
         ('((25)).toString()', '(25).toString();'),
         ('((25))["toString"]()', '(25).toString();'),
 
         # attribute access on immediate number
         ('((25)).attr', '(25).attr;'),
         ('((25))["attr"]', '(25).attr;'),
+        ('((0))["attr"]', '(0).attr;'),
 
         # function call in FOR init
         ('for(o(); i < 3; i++) {}', 'for(o();i<3;i++){}'),

@@ -352,12 +352,11 @@ class ECMAVisitor(object):
     def visit_DotAccessor(self, node):
         if getattr(node, '_parens', False):
             template = '(%s.%s)'
+        elif isinstance(node.node, ast.Number):
+            template = '(%s).%s'
         else:
             template = '%s.%s'
-        left = self.visit(node.node)
-        if isinstance(node.node, ast.Number):
-            left = '(%s)' % left
-        s = template % (left, self.visit(node.identifier))
+        s = template % (self.visit(node.node), self.visit(node.identifier))
         return s
 
     def visit_BracketAccessor(self, node):

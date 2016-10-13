@@ -30,6 +30,9 @@ from slimit import ast
 from slimit.lexer import Lexer
 
 _HAS_ID_MATCH = re.compile('^%s$' % Lexer.identifier).match
+# Matches all immediate numbers, which are dot accessable (expects a number as input)
+_DOT_ACCESSABLE_NUMBER = re.compile('^(0.+|.+[eE].+|.+\..+)$')
+
 
 def _is_identifier(value):
     return _HAS_ID_MATCH(value) and value not in Lexer.keywords_dict
@@ -386,12 +389,11 @@ class ECMAMinifier(object):
     def visit_DotAccessor(self, node):
         if getattr(node, '_parens', False):
             template = '(%s.%s)'
+        elif isinstance(node.node, ast.Number) and not _DOT_ACCESSABLE_NUMBER.match(node.node.value):
+            template = '(%s).%s'
         else:
             template = '%s.%s'
-        left = self.visit(node.node)
-        if isinstance(node.node, ast.Number):
-            left = '(%s)' % left
-        s = template % (left, self.visit(node.identifier))
+        s = template % (self.visit(node.node), self.visit(node.identifier))
         return s
 
     def visit_BracketAccessor(self, node):
@@ -404,7 +406,7 @@ class ECMAMinifier(object):
                 value = value.strip('"')
             if _is_identifier(value):
                 left = self.visit(node.node)
-                if isinstance(node.node, ast.Number):
+                if isinstance(node.node, ast.Number) and not _DOT_ACCESSABLE_NUMBER.match(node.node.value):
                     left = '(%s)' % left
                 s = '%s.%s' % (left, value)
                 return s
@@ -440,4 +442,3 @@ class ECMAMinifier(object):
 
     def visit_This(self, node):
         return 'this'
-

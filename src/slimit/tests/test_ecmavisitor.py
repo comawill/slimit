@@ -500,6 +500,15 @@ class ECMAVisitorTestCase(unittest.TestCase):
           }
         };
         """,
+         # function call on immediate number
+        '(0x25).toString();', 
+        '(1e3).toString();',
+        '(25).toString();',
+
+        # attribute access on immediate number
+        '(25).attr;',
+        '25["attr"];',
+        '0["attr"];',
         ]
 
 
